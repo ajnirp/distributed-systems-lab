@@ -38,6 +38,10 @@ import java.util.Enumeration;
 import java.util.Date;
 import java.text.SimpleDateFormat;
 
+// Logging for the server side
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+
 /**
  * The class <code>jrpcgen</code> implements a Java-based rpcgen RPC protocol
  * compiler. jrpcgen is a Java-based tool that generates source code of Java
@@ -231,7 +235,7 @@ public class jrpcgen {
      * Enable generation of accessors in order to use XDR classes as beans.
      */
     public static boolean makeBean = false;
-    
+
     /**
      * Enable automatic initialization of String with empty Strings
      * instead of null reference.
@@ -242,7 +246,7 @@ public class jrpcgen {
 	 * Creates a new source code file for a Java class based on its class
      * name. Same as {@link #createJavaSourceFile(String, boolean)} with
      * the <code>emitImport</code> parameter set to <code>true</code>.
-     * 
+     *
      * @param classname Name of Java class to generate. Must not contain
      *   a file extension -- especially ".java" is invalid. When the source
      *   code file is created, ".java" is appended automatically.
@@ -346,6 +350,11 @@ public class jrpcgen {
 		if ( emitImports ) {
 			out.println("import org.acplt.oncrpc.*;");
 			out.println("import java.io.IOException;");
+            out.println("import java.util.Date;");
+            out.println("import java.text.DateFormat;");
+            out.println("import java.text.SimpleDateFormat;");
+            out.println("import java.io.OutputStreamWriter;");
+            out.println("import java.io.FileWriter;");
 			out.println();
 		}
 
@@ -1559,6 +1568,10 @@ public class jrpcgen {
             }
             out.println(")");
             out.println("           throws OncRpcException, IOException {");
+
+            // Start time for client logging
+            out.println("long startTime = System.currentTimeMillis();");
+
             //
             // Do generate code for wrapping parameters here, if necessary.
             //
@@ -1678,6 +1691,16 @@ public class jrpcgen {
                             + ", client.getVersion(), "
                             + xdrParamsName + ", result$);");
             }
+
+            // End time for client logging
+            out.println("long endTime = System.currentTimeMillis();");
+            out.println("long timeTaken = endTime - startTime;");
+            out.println("String logfileName = \"log-client.txt\";");
+            String procedureName = proc.procedureId;
+            out.println("FileWriter logger = new FileWriter(logfileName, true);");
+            out.println("logger.write(\"Time taken by RPC for \" + " + "\"" + procedureName + "\" + " + "\": \" + timeTaken + \" milliseconds\");");
+            out.println("logger.close();");
+
             //
             // In case of a wrapped result we need to return the value
             // of the wrapper, otherwise we can return the result
@@ -1865,6 +1888,23 @@ public class jrpcgen {
         closeJavaSourceFile();
     }
 
+    // private static void logDateAndTime(JrpcgenProcedureInfo proc) {
+    //     try {
+    //         String logfileName = "log-server.txt";
+    //         FileWriter logger = new FileWriter(logfileName, true);
+
+    //         DateFormat dateFormat = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss");
+    //         Date date = new Date();
+    //         String formattedDate = dateFormat.format(date);
+
+    //         logger.write("Remote procedure call: " + proc.procedureId + " " + formattedDate + "\n");
+    //         logger.close();
+    //     }
+    //     catch (IOException e) {
+    //         System.err.println("error opening log file");
+    //     }
+    // }
+
     /**
      *
      */
@@ -1925,6 +1965,12 @@ public class jrpcgen {
             //
             paramsKind = PARAMS_VOID;
         }
+
+        // logDateAndTime(proc);
+
+        String procedureName = proc.procedureId;
+
+        out.println("try {String logfileName = \"log-server.txt\";FileWriter logger = new FileWriter(logfileName, true);DateFormat dateFormat = new SimpleDateFormat(\"yyyy.MM.dd HH:mm:ss\");Date date = new Date();String formattedDate = dateFormat.format(date);logger.write(\"Remote procedure call: \" + " + "\"" + procedureName + "\"" + " + \" \" + formattedDate + \"\\n\");logger.close();}catch (IOException e) {System.err.println(\"error opening log file\");}");
 
         //
         // Do generate code for unwrapping here, if necessary.
