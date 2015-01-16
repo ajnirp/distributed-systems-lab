@@ -1698,7 +1698,7 @@ public class jrpcgen {
             out.println("String logfileName = \"log-client.txt\";");
             String procedureName = proc.procedureId;
             out.println("FileWriter logger = new FileWriter(logfileName, true);");
-            out.println("logger.write(\"Time taken by RPC for \" + " + "\"" + procedureName + "\" + " + "\": \" + timeTaken + \" milliseconds\");");
+            out.println("logger.write(\"Time taken by RPC for \" + " + "\"" + procedureName + "\" + " + "\": \" + timeTaken + \" milliseconds\\n\");");
             out.println("logger.close();");
 
             //

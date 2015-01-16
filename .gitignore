@@ -1,7 +1,18 @@
-# Created by https://www.gitignore.io
-
 .fuse_ignore*
+
+# log files
 output.txt
+log-server.txt
+log-client.txt
+
+# auto-genned files
+acc_id_num.java
+acc_balance.java
+getAccType.java
+getAccTypeClient.java
+getAccTypeServerStub.java
+history.java
+transaction_pair.java
 
 *~
 
