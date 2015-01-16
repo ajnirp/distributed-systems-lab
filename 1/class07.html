@@ -1,0 +1,1159 @@
+<HTML>
+<HEAD>
+   <META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=iso-8859-1">
+   <META NAME="GENERATOR" CONTENT="Mozilla/4.05 [en] (X11; I; SunOS 5.5.1 sun4m) [Netscape]">
+</HEAD>
+<BODY TEXT="#000000" BGCOLOR="#FFFFFF" LINK="#0000EE" VLINK="#551A8B" ALINK="#FF0000">
+<B><FONT SIZE=+1>ONC REMOTE PROCEDURE CALL PROGRAMMING</FONT></B>
+<pre>
+ 
+                                    WHAT IS RPC?
+ 
+        o The Open Network Computing Remote Procedure Call mechanism
+          allows a server machine to define a procedure that a program
+          on a client machine can call
+ 
+            -- Originally used TCP and UDP
+ 
+            -- SVR4 version uses any transport protocol
+ 
+        o Each procedure takes one parameter and returns one result
+ 
+            -- May be structures
+ 
+        o By convention, all data passed into a remote procedure and
+          returned by a procedure should be encoded into a common data
+          representation (since different machines have different byte
+          ordering, size, and word alignment)
+ 
+        o The eXternal Data Representation package (XDR) provides
+          routines that remote procedures can use to encode data into a
+          common format
+ 
+ 
+ 
+                                    RPC FLOW
+ 
+ 
+                    |
+                    |
+                    |
+            Client  |
+           executes |
+                    |
+                    |   RPC call message
+                    +-----------------------|
+                    +                       |Server invoked
+                    +                       |
+                    +                       |
+                    +                       +-------------------+-
+                    +                         Procedure called  |
+                    +                                           |
+                    +                                           |Server
+            Client  +                                           |executes
+                    +        Network                            |
+            blocks  +                                           |procedure
+                    +                                           |
+                    +                         Procedure returns |
+                    +                       +-------------------+
+                    +                       |
+                    +                       |
+                    +                       | Request completed
+                    +-----------------------+
+                    |
+                    |   RPC return message
+                    |
+            Client  |
+                    |
+          continues |
+          execution |
+                    |
+                    |
+                    |
+ 
+ 
+ 
+                        RPC DETAILS
+ 
+        o When a server defines a procedure, it must supply a program
+          number, version number, and procedure number for that
+          procedure
+ 
+            -- The program number defines a particular service grouping
+ 
+            -- The version number allows RPC protocols to be extended
+ 
+            -- The procedure number specifies the procedure within the
+               service grouping
+ 
+        o The server registers all procedures with the local portmapper
+          daemon
+ 
+        o By convention, every RPC takes one argument and returns one
+          result
+ 
+ 
+        o When a client application makes a remote procedure call, it
+          specifies:
+ 
+            -- server information
+ 
+            -- program number
+ 
+            -- version number
+ 
+            -- procedure number
+ 
+            -- argument to procedure
+ 
+            -- result to be returned
+ 
+            -- timeout information
+ 
+        o Server performs the requested service
+ 
+        o Results (or error information) returned to client
+ 
+ 
+                                    GENERAL FLOW
+ 
+          Server actions:
+ 
+             o A program supplying the procedure is written
+ 
+             o The program is run on the server machine
+ 
+             o The program associates itself with an arbitrary, unused
+               address
+ 
+             o It tells the local portmapper daemon what the address is
+ 
+                 -- The local portmapper is on a well-known address
+ 
+ 
+          Client actions:
+ 
+             o The client makes a request to the server's portmapper
+ 
+                 -- The portmapper is on a well-known address
+ 
+             o The client asks for the address of the program it wants
+ 
+             o The portmapper sends the address to the client
+ 
+             o The client communicates with the program
+ 
+                 -- Calls procedures defined by the program
+ 
+ 
+                                   AUTHENTICATION
+ 
+          Every call and reply is authenticated.  Several flavors of
+          authentication can be used:
+ 
+             o ``none''
+ 
+                 -- No information is passed
+ 
+             o ``unix''
+ 
+                 -- Machine name, user id, group id is passed
+ 
+             o ``secure''
+ 
+                 -- Uses cryptography for verification
+ 
+             o Vendor-defined
+ 
+ 
+                                   RPC PROGRAMMING
+ 
+        o The remote procedure call mechanism uses several of low-level
+          connection routines
+ 
+        o These routines are generated automatically by a compiler,
+          called rpcgen
+ 
+            -- Uses the ``none'' flavor of authentication
+            -- Can be changed explicitly
+ 
+        o We will generate two RPC programs using rpcgen
+ 
+        o Each RPC program needs three components:
+ 
+            -- An RPC ``.x'' file
+            -- The server side ``.c'' file
+            -- The client side ``.c'' file
+ 
+ 
+                             SIMPLE ARITHMETIC PROTOCOL
+ 
+          /*
+           *   math.x
+           */
+ 
+ 
+          struct intpair {
+               int a;
+               int b;
+          };
+ 
+          program MATHPROG {
+               version MATHVERS {
+                    int MATHPROC_ADD(intpair) = 1;
+                    int MATHPROC_SUB(intpair) = 2;
+                    int MATHPROC_MULT(intpair) = 3;
+               } = 1;
+          } = 0x20000008;
+ 
+ 
+                              SERVER CODE - math_proc.c
+ 
+          #include &lt;rpc/rpc.h>
+          #include "math.h"
+ 
+          int *
+          mathproc_add_1(pair)
+          intpair * pair;
+          {
+               static int result;
+ 
+               result = pair->a + pair->b;
+               return(&result);
+          }
+ 
+          int *
+          mathproc_sub_1(pair)
+          intpair * pair;
+          {
+               static int result;
+ 
+               result = pair->a - pair->b;
+               return(&result);
+          }
+ 
+          int *
+          mathproc_mult_1(pair)
+          intpair * pair;
+          {
+               static int result;
+ 
+               result = pair->a * pair->b;
+               return(&result);
+          }
+ 
+ 
+                                CLIENT CODE - math.c
+ 
+ 
+          #include &lt;rpc/rpc.h>
+          #include "math.h"
+ 
+          main(argc, argv)
+          int argc;
+          char *argv[];
+          {
+               CLIENT *cl;
+               intpair pair;
+               int *result;
+ 
+               if (argc != 4) {
+                    fprintf(stderr, "usage: prog server num1 num2\n");
+                    exit(1);
+               }
+ 
+               cl = clnt_create(argv[1], MATHPROG, MATHVERS, "udp");
+               if (cl == NULL) {
+                    clnt_pcreateerror(argv[1]);
+                    exit(1);
+               }
+               pair.a = atoi(argv[2]);
+               pair.b = atoi(argv[3]);
+ 
+               result = mathproc_add_1(&pair, cl);
+               if (result == NULL) {
+                    clnt_perror(cl, "add");
+                    exit(1):
+               }
+               printf("the addition returned %d\n", *result);
+ 
+               result = mathproc_mult_1(&pair, cl);
+               if (result == NULL) {
+                    clnt_perror(cl, "mult");
+                    exit(1):
+               }
+               printf("the multiplication returned %d\n", *result);
+          }
+ 
+ 
+ 
+                                     RPC EXAMPLE
+ 
+        o To create the application, run:
+ 
+          $ rpcgen math.x
+ 
+        o This creates math_clnt.c math_xdr.c math_svc.c
+ 
+        o Compile all of the pieces together:
+ 
+          $ cc math.c math_clnt.c \
+            math_xdr.c -o math
+ 
+          $ cc math_svc.c math_proc.c \
+             math_xdr.c -o math_svc
+ 
+ 
+        o On server (named elvis):
+ 
+          $ math_svc &
+ 
+ 
+        o On client:
+ 
+          $ math elvis 12 3
+          the addition returned 15
+          the multiplication returned 36
+ 
+----------------------------------------------------------------------
+The RPC definition language
+ 
+The program definition:
+ 
+       program identifier {
+              version_list
+       } = value;
+ 
+The version_list:
+ 
+       version identifier{
+              procedure_list
+       } = value;
+ 
+The procedure_list:
+ 
+       data_type procedure_name ( data_type ) = value;
+ 
+example:
+ 
+       program TIMEINFO {
+            version TIMEVERS {
+                   unsigned int GETTIME (void) = 1;
+            } = 1;
+       } = 0x20000009;
+ 
+Produces a header file:
+ 
+       #define TIMEINFO ((u_long)0x20000009)
+       #define TIMEVERS ((u_long)1)
+       #define GETTIME ((u_long)1)
+       extern u_int *gettime_1();
+ 
+---------------------------------------
+Complex Data Types:
+---------------------------------------
+ 
+Constants
+ 
+       const identifier = integer_value;
+ 
+example:
+ 
+       const MAX_ENTRIES = 1024;
+ 
+gets translated into
+ 
+       #define MAX_ENTRIES 1024
+ 
+--------------------------------------------
+Structures
+--------------------------------------------
+ 
+Structures in the RPC definition language are defined the same
+as in the C programming language.
+ 
+       struct intpair {
+               int a;
+               int b;
+       };
+ 
+generates the following definition in the header file:
+ 
+       struct intpair {
+               int a;
+               int b;
+       };
+       typedef struct intpair intpair;
+ 
+--------------------------------------------
+Enumerations
+ 
+As with structures, enumerations in the RPC definition are
+the same as in the C programming language.
+ 
+       enum trafficlight {
+               RED = 0,
+               AMBER = 1,
+               GREEN = 2
+       };
+ 
+gets translated into:
+ 
+       enum trafficlight {
+               RED = 0,
+               AMBER = 1,
+               GREEN = 2
+       };
+       typedef enum trafficlight trafficlight;
+ 
+ 
+--------------------------------------------
+Unions
+ 
+Unions in the RPC definition language look very little like
+their C counterparts.
+ 
+In C, a union is a list of components that are conceptually
+overlaid in a storage area.
+ 
+In the RPC definition language, a union is a specification
+of data types based on some criteria.
+ 
+To illustrate, consider a procedure does the following:
+ 
+1. It accepts a character array containing user name as a parameter.
+ 
+2. It figures out if that user is logged onto the system.
+   If the user is logged on, the procedure returns a character
+   array containing the time the user logged on.  If the user
+   is not logged on, the procedure returns no data.  If
+   information about the user could not be obtained,
+   the procedure returns an integer containing an error code.
+ 
+In this example, the procedure returns one of three data types:
+a character array, an integer, or a void (i.e., no value).
+ 
+Unions in the RPC definition language let you convey this
+information.
+ 
+They contain a switch that lets applications know which
+elements of the union should be used in which cases.
+ 
+The definition of a union follows:
+ 
+       union identifier switch ( declaration ) {
+               case_list
+       };
+ 
+The identifier is the name of the union.
+ 
+The declaration is a simple declaration as defined
+by the C language (an example will follow shortly).
+ 
+Based on the value of the declaration, an element of the
+case_list is used.
+ 
+The case_list is a list of statements of the following form:
+ 
+       case value : declaration ;
+ 
+The case_list can also contain an
+optional default line of the following form:
+ 
+       default : declaration ;
+ 
+To illustrate, consider the procedure described above
+that accepts a user name and returns the time of day that
+user logged onto the system.
+ 
+       const MAX_TIME_BUF = 30;
+       union time_results switch (int status) {
+               case 0:
+                       char timeval[MAX_TIME_BUF];
+               case 1:
+                       void;
+               case 2:
+                       int reason;
+       };
+ 
+This definition describes the three possible data types returned
+from this procedure.
+ 
+ 
+The rpcgen compiler generates the
+following C data structure from this definition:
+ 
+       #define MAX_TIME_CHARS 30
+       struct time_results {
+               int status;
+               union {
+                       char timeval[MAX_TIME_CHARS];
+                       int reason;
+               } time_results_u;
+       };
+       typedef struct time_results time_results;
+ 
+When you implement an RPC program, you must use the
+generated structure.  The RPC definition of the union
+is for informational purposes, defining the possible
+data structures the procedure can return.
+ 
+ 
+Notes:
+ 
+1. The union component of the structure has the same name as the
+   union identifier in the RPC definition, except it has
+   a trailing _u.
+2. The void declaration is omitted, since it is used only
+   to inform users that no information is returned in the specified case.
+3. The first element of the structure is the same as
+   the union declaration in the RPC definition.
+ 
+When you implement the procedure,
+you must be sure that you assign the status element
+only the values of 0, 1, or 2.
+ 
+This is because the union definition in the RPC language
+only shows those values.
+ 
+You must fill the rest of the structure according to
+the RPC specification:
+ 
+- If you place a 0 in the status field, you must
+  assign data to the time_results_u.timeval array.
+ 
+- If you assign a 1 to status, you need not fill in
+  any part of the union (a 1 in the status field
+  says nothing is returned).
+ 
+- If you assign a 2 to status, you must assign a value to
+  the time_results_u.reason element.
+ 
+When the application on the client machine receives this structure
+from the procedure, it must first check the value of
+the status element.  Based on that value, it uses the
+corresponding element of the union.
+ 
+ 
+--------------------------------------------
+Type Definitions
+--------------------------------------------
+ 
+Type definitions are the same as their C counterparts.
+ 
+       typedef long counter_t;
+ 
+gets transferred directly into the header file.
+ 
+ 
+--------------------------------------------
+Declarations of Arrays
+ 
+The  rpcgen  compiler lets you declare
+arrays within structures, unions, and typedefs.
+ 
+Arrays can be of fixed-length or of variable-length.
+ 
+Fixed length arrays are declared the same as their C language
+counterparts.  Consider the following:
+ 
+        int proc_hits[100];
+ 
+This declares  proc_hits  to be an array of 100 integers.
+ 
+The  rpcgen  compiler transfers this declaration into
+the header file without modification.
+ 
+You can also specify variable length arrays.
+ 
+The maximum size of the array is enclosed in angle braces.  You can
+omit the size to indicate that there is no maximum value.
+For example, consider the following declaration:
+ 
+        long x_coords<50>;
+ 
+This declares  x_coords  to be an array of
+0 to 50 long integers.  Similarly, the following declaration:
+ 
+        long z_coords<>;
+ 
+declares  z_coords  to be an array of long integers.
+In this case, the array size is can be any value that can fit
+in an unsigned integer.
+ 
+Since the C language does not support variable-length arrays,
+the  rpcgen  compiler translates these declarations into
+a C data structure.
+ 
+The structure has a length indicator and a
+pointer to the array.
+For example, the declaration:
+ 
+        typedef long x_coords<50>;
+ 
+gets translated into:
+ 
+        typedef struct {
+                u_int x_coords_len;
+                long *x_coords_val;
+        } x_coords;
+ 
+ 
+The length indicator is an unsigned integer, and is formed by
+appending  _len  to the declaration name.
+ 
+The pointer to the array is formed by appending  _val
+to the declaration name.
+ 
+When you implement the remote procedures, you
+must use the  x_coords_len and the  x_coords_val  elements of the  x_coords
+structure.
+ 
+When populating the structure, you must
+set the length of the array in the  x_coords_len  element
+and allocate space to store the array in the  x_coords_val
+element.
+ 
+----------------------------------------------------------------------
+Declarations of Pointers
+ 
+Pointer declarations in the RPC definition language are the same as in
+the C language.  For example, the declaration:
+ 
+        int *nextp;
+ 
+gets transferred without modification into the header file
+generated by  rpcgen .
+ 
+----------------------------------------------------------------------
+Strings
+ 
+The RPC definition language lets you declare strings.  Strings
+are declared as if they were variable-length arrays.
+ 
+        string first_name<50>;
+ 
+This declares  first_name  to be a string of at most 50
+characters.
+ 
+The value in the angle brackets can be empty,
+specifying there is no maximum length of the string.
+The  rpcgen  compiler translates this into the following
+declaration:
+ 
+        char *first_name;
+ 
+The declaration of the string in the `` .x '' file
+shows that the string may contain a maximum number of characters.
+ 
+When you implement your procedures, you must allocate space to
+hold the string and make sure the string length does not
+exceed the maximum value specified in the RPC definition.
+ 
+----------------------------------------------------------------------
+Boolean Values
+ 
+You can declare boolean values in the RPC language.  For example,
+the following declares  waiting  as a boolean value:
+ 
+        bool waiting;
+ 
+The  rpcgen  compiler translates this into the following:
+ 
+        bool_t waiting;
+ 
+Since  bool_t  is not a C data type, the RPC library creates
+a type definition for you.  You should only place the values
+TRUE  or  FALSE  in a variable of this type.
+ 
+----------------------------------------------------------------------
+Void
+ 
+In a  void  declaration, a variable is not named.
+The declaration is simple:
+ 
+        void;
+ 
+A declaration of this type can only appear in two places:
+ 
+        1. A union definition.  In a union definition, it is interpreted as
+           ``no value.''
+ 
+        2. A program definition.  In a program definition, the argument
+           or the result of a procedure can be  void .  A  void
+           argument means no argument is needed, and a  void
+           result means nothing is returned.
+ 
+----------------------------------------------------------------------
+Opaque Data
+ 
+The RPC definition language also lets you declare opaque data.
+Opaque data is untyped and contains an arbitrary sequence
+of bytes.  It can be declared with a fixed or a variable length.
+For example, consider the following declaration:
+ 
+        opaque extra_bytes[1024];
+ 
+This declares  extra_bytes  to be an arbitrary sequence
+of  1024  bytes.
+ 
+The  rpcgen  compiler translates this into a character
+array:
+ 
+        char extra_bytes[1024];
+ 
+Variable length opaque data is declared with angle brackets:
+ 
+        opaque more_bytes<1024>;
+ 
+This declares  more_bytes  to be an arbitrary sequence
+of  0  to  1024  bytes.  The  rpcgen  compiler
+translates this into the following structure:
+ 
+        struct {
+                u_int  more_bytes_len;
+                char  *more_bytes_val;
+        } more_bytes;
+ 
+ 
+When your RPC application populates this structure, you must
+allocate space in  more_bytes.more_bytes_val  to hold the
+data.  You must also specify the number of bytes in  more_bytes.more_bytes_len .
+ 
+Note:
+ 
+        If the procedure allocates memory (e.g., to hold
+        the elements of a linked list), the data must not
+        be deallocated until all processing of the data is complete.
+ 
+        Unfortunately, data is translated into XDR representation
+        after  the procedure ends.
+        So, you must not deallocate any memory your procedure
+        allocates until the  next  invocation of the procedure.
+ 
+----------------------------------------------------------------------
+ 
+Let's look at how a remote procedure allocates and frees memory.
+ 
+Suppose you define a remote procedure that returns a linked list of
+data.
+ 
+When called, the procedure uses the normal memory allocation
+routines ( malloc() , calloc() , etc.) to populate the linked list.
+ 
+When the procedure ends, the lower-level RPC routines translate the
+list into XDR representation and send the data to the application on the
+client machine.  However, the lower-level RPC routines do not free
+this memory.
+ 
+This is a problem because the program supplying the procedure
+never exits.  As mentioned earlier, the program supplying
+remote procedures runs continually on the server machine waiting
+for RPC requests.
+ 
+The next time someone calls a procedure, the previously-allocated
+memory still exists.
+ 
+Therefore, a procedure must deallocate previously-allocated
+memory when it  begins .  But, since the previously-allocated
+data in now in XDR format, the procedure must use XDR routines to
+free the data.  We now present these XDR routines.
+ 
+You must use the  xdr_free()
+routine to free data your procedure allocates.
+ 
+The  xdr_free()  routine takes a pointer to an XDR
+function and a data pointer.
+ 
+It frees the memory associated with the data pointer.
+The function passed to  xdr_free()  is the XDR
+routine corresponding to the data type.
+ 
+The  rpcgen compiler always names these functions  xdr_any() ,
+where any is the data type name.
+ 
+ 
+Example:
+ 
+        struct link_list {
+                int data;
+                struct link_list *nextp;
+        };
+ 
+ 
+The  rpcgen  compiler creates a function named
+ xdr_link_list()  that translates this data structure
+into XDR format.
+ 
+Now, suppose you allocate memory to hold the
+list, and place the first memory location of the list in a variable
+named  headp .
+ 
+After the XDR routines translate the list into XDR format,
+you can free the entire linked list with the following call:
+ 
+        xdr_free(xdr_linked_list, headp);
+ 
+ 
+As mentioned earlier, the lower-level RPC routines
+translate a procedure's results into
+XDR representation after the procedure ends.
+So, if your results contain allocated memory, you must not free
+the memory until the next time an application on a client machine
+calls the procedure.
+Usually, you free previously-allocated memory at the beginning
+of the procedure, and then allocate new data as needed.
+ 
+ 
+const MAX_NAME_SIZE = 20;
+struct personinfo {
+        string login_name<MAX_NAME_SIZE>;
+        struct personinfo *nextp;
+};
+enum errorcodes {
+        NO_MEMORY = 0,
+        CANT_GET_INFO = 1
+};
+union results switch (int status) {
+        case 0:
+                struct personinfo *personinfop;
+        default:
+                enum errorcodes reason;
+};
+program RUSERS_PROG {
+        version RUSERS_VERS {
+                results RUSERS(void) = 1;
+        } = 1;
+} = 0x200010f4;
+ 
+ 
+Server:
+ 
+#include &lt;stdio.h>
+#include &lt;rpc/rpc.h>
+#include "rusers.h"
+results *
+ rusers_1 (filler)
+int *filler;
+{
+   static results results;
+   personinfo    *currp;
+   personinfo   **currpp;
+   FILE *fp;
+   char buf[BUFSIZ];
+   /*
+    *  Free the space we allocated the previous time this
+    *  procedure was called.
+    */
+    xdr_free (xdr_results, &results);
+ 
+   /*
+    *  Get the users currently logged on by calling
+    *  the popen function
+    */
+   if ((fp = popen("who | cut -d' ' -f1", "r")) == NULL) {
+         results.status  = 1;
+         results.results_u.reason  = CANT_GET_INFO;
+        return (&results);
+   }
+    
+   currpp = & results.results_u.personinfop ;
+   while (fgets(buf, BUFSIZ, fp) != NULL) {
+      if ((currp = *currpp =
+         (personinfo *)malloc(sizeof(personinfo))) == NULL){
+            results.status  = 1;
+            results.results_u.reason  = NO_MEMORY;
+           return (&results);
+      }
+      if (strlen(buf) > MAX_NAME_SIZE) {
+           buf[MAX_NAME_SIZE - 1] = ' ';
+      } else {
+           /*
+            *  Get rid of new-line character
+            */
+           buf[strlen(buf) - 1] = ' ';
+      }
+      currp->login_name = (char *)malloc(strlen(buf));
+      strcpy(currp->login_name, buf);
+      currpp = &(currp->nextp);
+   }
+   *currpp = NULL;
+    results.status  = 0;
+   return &results;
+}
+ 
+ 
+ 
+Client:
+ 
+#include &lt;stdio.h>
+#include &lt;rpc/rpc.h>
+#include "rusers.h"
+main(argc, argv)
+int argc;
+char *argv[];
+{
+    CLIENT *cl;
+    results *resultp;
+    struct personinfo *currp;
+    int filler;
+    int i;
+    int error = 0;
+    if (argc < 2) {
+       fprintf(stderr, "%s: usage: %s server [server...] n",
+               argv[0], argv[0]);
+       exit(1);
+    }
+    for (i = 1; argv[i]; i++) {
+       printf("---------- %s ------------- n", argv[i]);
+       cl =  clnt_create (argv[i], RUSERS_PROG, RUSERS_VERS,
+                        "netpath");
+       if (cl == NULL) {
+             clnt_pcreateerror (argv[i]);
+            error = 1;
+            continue;
+       }
+       resultp =  rusers_1 (&filler, cl);
+       if (resultp == NULL) {
+             clnt_perror (cl, "rusers_1");
+            error = 1;
+            continue;
+       }
+ 
+       if ( resultp->status  != 0) {
+            printf("ERROR! n");
+            switch ( resultp->results_u.reason ) {
+               case NO_MEMORY:
+                 printf("Server ran out of memory n");
+                 break;
+               case CANT_GET_INFO:
+                 printf("Server could not get info n");
+                 break;
+            }
+            error = 1;
+            continue;
+       }
+       currp =  resultp->results_u.personinfop ;
+ 
+       while (currp) {
+           printf("%.20s n", currp->login_name);
+           currp = currp->nextp;
+       }
+       /*
+        *  Free all data associated with this RPC
+        */
+        clnt_freeres (cl, xdr_results, resultp);
+        clnt_destroy (cl);
+    }
+ 
+    exit(error);
+}
+ 
+ 
+ 
+                               CHANGING AUTHENTICATION
+ 
+ 
+        o By default, the ``none'' flavor of authentication is
+          incorporated into the application
+ 
+        o To modify it, change math.c on the client:
+ 
+              cl = clnt_create(argv[1], MATHPROG, MATHVERS, "udp");
+              if (cl == NULL) {
+                  clnt_pcreateerror(argv[1]);
+                  exit(1);
+              }
+              cl->cl_auth = authsys_create_default();
+ 
+        o authsys_create_default() uses ``unix'' flavor of
+          authentication
+ 
+ 
+        o You can also use authdes_seccreate(), which uses ``secure''
+          flavor of authentication
+ 
+            -- This is more complicated to set up
+ 
+ 
+                               CHANGING AUTHENTICATION
+ 
+ 
+        o Server code must also be modified
+ 
+        o The code implementing the service can take a svc_req structure
+ 
+            -- You must cast the rq_clntcred element to a structure
+               corresponding to the authentication flavor
+ 
+        o The ``unix'' flavor uses a authsys_parms structure
+ 
+        o You can check
+          rq->rq_cred.oa_flavor
+          to determine the authentication flavor the client used
+ 
+        o The following shows the server code using the ``unix''
+          authentication flavor
+ 
+ 
+                               CHANGING AUTHENTICATION
+ 
+ 
+          int *
+          mathproc_add_1(pair, rq)
+          intpair * pair;
+          struct svc_req *rq;
+          {
+               static int result;
+               struct authsys_parms *aup;
+ 
+               aup = (struct authsys_parms *)rq->rq_clntcred;
+               /*
+                *  authsys_parms has the following elements:
+                *
+                *   u_long  aup_time;      credential creation time
+                *   char   *aup_machname;  name of client machine
+                *   uid_t   aup_uid;       client's effective user id
+                *   gid_t   aup_gid;       client's current group id
+                *   int     aup_len;       element length of aup_gids
+                *   gid_t  *aup_gids;      array of groups user is in
+                *
+                *  You can use these fields to log who called the
+                *  procedure, to disallow some users from calling the
+                *  procedure, etc.
+                *
+                *
+                *  For example:
+                *
+                *  log("%d from %s called mathproc_add_1",
+                *                        aup->aup_uid, aup->aup_machname);
+                *
+                */
+ 
+               result = pair->a + pair->b;
+               return(&result);
+          }
+ 
+ 
+ 
+        o SVR4 made RPC transport-independent
+ 
+        o The clnt_create() call can take values other than tcp and udp
+ 
+            -- netpath - chose a transport provider based on the NETPATH
+               variable
+ 
+            -- visible - chose from visible transports in the
+               /etc/netconfig file
+ 
+            -- circuit_v - choose a visible, connection-oriented
+               transport from /etc/netconfig
+ 
+            -- datagram_v - choose a visible, connectionless transport
+               from /etc/netconfig
+ 
+            -- circuit_n - choose a connection-oriented transport based
+               on the NETPATH variable
+ 
+            -- datagram_n - choose a connectionless transport based on
+               the NETPATH variable
+ 
+ 
+                                  HOST ID PROTOCOL
+ 
+          /*
+           *   hostid.x
+           */
+ 
+          program HOSTIDPROG {
+               version HOSTIDVERS {
+                    long RGETHOSTID(void) = 1;
+               } = 1;
+          } = 0x20001089;
+ 
+ 
+                             SERVER CODE - hostid_proc.c
+ 
+ 
+          #include &lt;rpc/rpc.h>
+          #include "hostid.h"
+ 
+          long *
+          rgethostid_1();
+          {
+               static long result;
+ 
+               /*
+                *   gethostid() is defined in SunOS
+                */
+ 
+               result = gethostid();
+ 
+               return(&result);
+          }
+ 
+ 
+ 
+                               CLIENT CODE - rhostid.c
+ 
+ 
+          #include &lt;rpc/rpc.h>
+          #include "hostid.h"
+ 
+          main(argc, argv);
+          int argc;
+          char *argv[];
+          {
+               CLIENT *cl;
+               long *result;
+               char filler;
+ 
+               if (argc != 2) {
+                    fprintf(stderr, "usage: prog server\n");
+                    exit(1);
+               }
+ 
+               cl = clnt_create(argv[1], HOSTIDPROG, HOSTIDVERS, "udp");
+               if (cl == NULL) {
+                    clnt_pcreateerror(argv[1]);
+                    exit(1);
+               }
+ 
+               result = rgethostid_1(&filler, cl);
+               if (result == NULL) {
+                    clnt_perror(cl, "rhostid");
+                    exit(1):
+               }
+               printf("the host id is %x\n", *result);
+          }
+ 
+ 
+                                    FINAL STAGES
+        o Compile everything, and run:
+ 
+          $ rpcgen hostid.x
+ 
+          $ cc hostid.c hostid_clnt.c -o rhostid
+ 
+          $ cc hostid_svc.c hostid_proc.c -o hostid_svc
+ 
+ 
+        o Note that xdr routines not generated
+ 
+            -- Not needed since only simple types are used
+ 
+        o On server named frodo:
+ 
+ 
+          $ hostid_svc &
+ 
+ 
+          On client:
+ 
+          $ rhostid frodo
+ 
+          the host id is 2ff023452
+ 
+</pre>
+</BODY>
+</HTML>
